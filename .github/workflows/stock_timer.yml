@@ -1,0 +1,30 @@
+name: 每日股票定时盯盘
+
+on:
+  # 1. 定时触发：每天北京时间上午 11:00 运行
+  schedule:
+    - cron: '0 3 * * *'
+  # 2. 手动触发：允许你在 GitHub 页面上点按钮随时测试运行
+  workflow_dispatch:
+
+jobs:
+  check-stock-job:
+    runs-on: ubuntu-latest
+    steps:
+      # 拉取代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 安装 Go 环境
+      - name: 设置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      # 运行股票监控脚本
+      - name: 运行股票分析并推送
+        env:
+          # 引入你在 GitHub Settings 里面存的企业微信群机器人 Webhook 地址
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+        run: |
+          go run stock.go
