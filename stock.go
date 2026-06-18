@@ -172,7 +172,17 @@ func sendToWeChat(
 	target float64,
 ) {
 
-	webhookURL := os.Getenv("WECOM_WEBHOOK")
+    webhookURL := os.Getenv("WECOM_WEBHOOK")
+
+	fmt.Printf("Webhook长度=%d\n", len(webhookURL))
+
+	if len(webhookURL) > 50 {
+		fmt.Printf(
+			"Webhook前30=%s\nWebhook后20=%s\n",
+			webhookURL[:30],
+			webhookURL[len(webhookURL)-20:],
+		)
+	}
 
 	if webhookURL == "" {
 		fmt.Println("⚠️ 未配置 WECOM_WEBHOOK")
