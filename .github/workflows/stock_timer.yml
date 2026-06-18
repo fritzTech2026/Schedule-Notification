@@ -33,6 +33,7 @@ jobs:
         env:
           # 🔐 1. 企业微信密钥，保持从 GitHub 网页后台的 Settings 安全读取
           WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
 
           # ⚙️ 2. 【核心监控区】在这里动态配置你的自选股和买入心理价
           # 格式规则：股票代码:自定义名字:买入目标心理价。多个股票用英文逗号分隔。
