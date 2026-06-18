@@ -9,109 +9,228 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
-type WeChatMarkdown struct { Content string `json:"content"` }
-type WeChatMsg struct { MsgType string `json:"msgtype"`; Markdown WeChatMarkdown `json:"markdown"` }
+type WeChatMarkdown struct {
+	Content string `json:"content"`
+}
 
-// 东方财富接口返回的 JSON 结构体
+type WeChatMsg struct {
+	MsgType  string         `json:"msgtype"`
+	Markdown WeChatMarkdown `json:"markdown"`
+}
+
+// 东方财富返回结构
 type EastMoneyResponse struct {
+	Rc   int    `json:"rc"`
+	Rt   int    `json:"rt"`
+	Svr  int    `json:"svr"`
+	Lt   int    `json:"lt"`
+	Full int    `json:"full"`
 	Data struct {
-		F43 float64 `json:"f43"` // f43 在东财接口中代表最新现价（单位通常为分，需除以100）
+		F43 float64 `json:"f43"`
 	} `json:"data"`
 }
 
 func main() {
 	configStr := os.Getenv("STOCK_LIST")
 	if configStr == "" {
-		fmt.Println("❌ 错误：未配置 STOCK_LIST 变量")
+		fmt.Println("❌ 未配置 STOCK_LIST")
 		return
 	}
 
 	stocks := strings.Split(configStr, ",")
+
 	for _, stock := range stocks {
+
 		parts := strings.Split(stock, ":")
+
 		if len(parts) != 3 {
-			fmt.Printf("⚠️ 忽略错误格式: %s\n", stock)
+			fmt.Printf("⚠️ 配置格式错误: %s\n", stock)
 			continue
 		}
-		
+
 		code := strings.TrimSpace(parts[0])
 		name := strings.TrimSpace(parts[1])
-		targetPrice, _ := strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+
+		targetPrice, err := strconv.ParseFloat(
+			strings.TrimSpace(parts[2]),
+			64,
+		)
+
+		if err != nil {
+			fmt.Printf("⚠️ [%s] 目标价格格式错误\n", name)
+			continue
+		}
 
 		checkStock(code, name, targetPrice)
+
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
 func checkStock(code, name string, targetPrice float64) {
-	// 转换股票代码格式适应东方财富接口：sh600519 -> 1.600519；sz000002 -> 0.000002
-	emCode := ""
-	if strings.HasPrefix(code, "sh") {
+
+	var emCode string
+
+	switch {
+	case strings.HasPrefix(code, "sh"):
 		emCode = "1." + strings.TrimPrefix(code, "sh")
-	} else if strings.HasPrefix(code, "sz") {
+
+	case strings.HasPrefix(code, "sz"):
 		emCode = "0." + strings.TrimPrefix(code, "sz")
-	} else {
-		emCode = code // 如果你直接在 yml 填了 1.600519 也能兼容
+
+	default:
+		emCode = code
 	}
 
-	// 东方财富标准高可用 API 接口
-	url := fmt.Sprintf("https://eastmoney.com", emCode)
-	
-	resp, err := http.Get(url)
+	url := fmt.Sprintf(
+		"https://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f43",
+		emCode,
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		fmt.Printf("❌ [%s] 海外网络请求失败: %v\n", name, err)
-		return 
+		fmt.Printf("❌ [%s] 创建请求失败: %v\n", name, err)
+		return
 	}
-	if resp != nil && resp.Body != nil {
-		defer resp.Body.Close()
+
+	req.Header.Set(
+		"User-Agent",
+		"Mozilla/5.0",
+	)
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
 	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		fmt.Printf("❌ [%s] 请求失败: %v\n", name, err)
+		return
+	}
+
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("❌ [%s] 东方财富接口响应错误，状态码: %d\n", name, resp.StatusCode)
+		fmt.Printf(
+			"❌ [%s] HTTP状态异常: %d\n",
+			name,
+			resp.StatusCode,
+		)
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
+
 	if err != nil {
+		fmt.Printf("❌ [%s] 读取响应失败\n", name)
 		return
 	}
 
-	// 解析标准的 JSON 数据
 	var result EastMoneyResponse
+
 	err = json.Unmarshal(body, &result)
+
 	if err != nil {
-		fmt.Printf("❌ [%s] JSON 解析失败: %v\n", name, err)
+		fmt.Printf(
+			"❌ [%s] JSON解析失败: %v\n",
+			name,
+			err,
+		)
 		return
 	}
 
-	// 东方财富返回的价格数据放大了 100 倍（例如 1500元会返回 150000），需要除以 100 恢复原价
 	currentPrice := result.Data.F43 / 100
+
 	if currentPrice <= 0 {
-		fmt.Printf("❌ [%s] 获取到了无效价格（可能是非交易时间或股票代码不正确）\n", name)
+		fmt.Printf(
+			"❌ [%s] 获取价格失败，返回值=%.2f\n",
+			name,
+			currentPrice,
+		)
 		return
 	}
 
-	fmt.Printf("📊 东财数据 -> [%s] 当前价: %.2f | 目标设定: %.2f\n", name, currentPrice, targetPrice)
+	fmt.Printf(
+		"📊 [%s] 当前价 %.2f 元 | 目标价 %.2f 元\n",
+		name,
+		currentPrice,
+		targetPrice,
+	)
 
-	// 判断是否触及目标价
 	if currentPrice <= targetPrice {
-		sendToWeChat(name, code, currentPrice, targetPrice)
+
+		fmt.Printf(
+			"🔥 [%s] 已达到目标价\n",
+			name,
+		)
+
+		sendToWeChat(
+			name,
+			code,
+			currentPrice,
+			targetPrice,
+		)
 	}
 }
 
-func sendToWeChat(name, code string, current, target float64) {
+func sendToWeChat(
+	name string,
+	code string,
+	current float64,
+	target float64,
+) {
+
 	webhookURL := os.Getenv("WECOM_WEBHOOK")
-	if webhookURL == "" { return }
 
-	msgContent := fmt.Sprintf("### 📈 东方财富·抄底提醒\n"+
-		"> **股票名称**: `%s` (%s)\n"+
-		"> **当前价格**: <font color=\"warning\">%.2f 元</font>\n"+
-		"> **心理价位**: %.2f 元\n\n"+
-		"> 💡 **提示**: 海外节点监测：价格已跌破预期，可以考虑建仓！", name, code, current, target)
+	if webhookURL == "" {
+		fmt.Println("⚠️ 未配置企业微信Webhook")
+		return
+	}
 
-	payload := WeChatMsg{MsgType: "markdown", Markdown: WeChatMarkdown{Content: msgContent}}
+	msgContent := fmt.Sprintf(
+		"### 📈 股票价格提醒\n"+
+			"> 股票名称：`%s` (%s)\n"+
+			"> 当前价格：<font color=\"warning\">%.2f 元</font>\n"+
+			"> 目标价格：%.2f 元\n\n"+
+			"> 💡 已达到预设买入区间",
+		name,
+		code,
+		current,
+		target,
+	)
+
+	payload := WeChatMsg{
+		MsgType: "markdown",
+		Markdown: WeChatMarkdown{
+			Content: msgContent,
+		},
+	}
+
 	jsonData, _ := json.Marshal(payload)
-	_, _ = http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
-	fmt.Printf("🎉 [%s] 已成功推送企业微信！\n", name)
+
+	resp, err := http.Post(
+		webhookURL,
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+
+	if err != nil {
+		fmt.Printf(
+			"❌ [%s] 企业微信发送失败: %v\n",
+			name,
+			err,
+		)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	fmt.Printf(
+		"🎉 [%s] 企业微信通知成功\n",
+		name,
+	)
 }
