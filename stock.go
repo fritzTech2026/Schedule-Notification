@@ -21,20 +21,10 @@ type WeChatMsg struct {
 	Markdown WeChatMarkdown `json:"markdown"`
 }
 
-// 东方财富返回结构
-type EastMoneyResponse struct {
-	Rc   int    `json:"rc"`
-	Rt   int    `json:"rt"`
-	Svr  int    `json:"svr"`
-	Lt   int    `json:"lt"`
-	Full int    `json:"full"`
-	Data struct {
-		F43 float64 `json:"f43"`
-	} `json:"data"`
-}
-
 func main() {
+
 	configStr := os.Getenv("STOCK_LIST")
+
 	if configStr == "" {
 		fmt.Println("❌ 未配置 STOCK_LIST")
 		return
@@ -66,29 +56,20 @@ func main() {
 
 		checkStock(code, name, targetPrice)
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 }
 
 func checkStock(code, name string, targetPrice float64) {
 
-	var emCode string
-
-	switch {
-	case strings.HasPrefix(code, "sh"):
-		emCode = "1." + strings.TrimPrefix(code, "sh")
-
-	case strings.HasPrefix(code, "sz"):
-		emCode = "0." + strings.TrimPrefix(code, "sz")
-
-	default:
-		emCode = code
-	}
-
 	url := fmt.Sprintf(
-		"https://push2.eastmoney.com/api/qt/stock/get?secid=%s&fields=f43",
-		emCode,
+		"https://qt.gtimg.cn/q=%s",
+		code,
 	)
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -100,10 +81,6 @@ func checkStock(code, name string, targetPrice float64) {
 		"User-Agent",
 		"Mozilla/5.0",
 	)
-
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
 
 	resp, err := client.Do(req)
 
@@ -126,31 +103,42 @@ func checkStock(code, name string, targetPrice float64) {
 	body, err := io.ReadAll(resp.Body)
 
 	if err != nil {
-		fmt.Printf("❌ [%s] 读取响应失败\n", name)
-		return
-	}
-
-	var result EastMoneyResponse
-
-	err = json.Unmarshal(body, &result)
-
-	if err != nil {
 		fmt.Printf(
-			"❌ [%s] JSON解析失败: %v\n",
+			"❌ [%s] 响应读取失败: %v\n",
 			name,
 			err,
 		)
 		return
 	}
 
-	currentPrice := result.Data.F43 / 100
+	content := string(body)
 
-	if currentPrice <= 0 {
+	fields := strings.Split(content, "~")
+
+	if len(fields) < 4 {
+
 		fmt.Printf(
-			"❌ [%s] 获取价格失败，返回值=%.2f\n",
+			"❌ [%s] 腾讯返回格式异常: %s\n",
 			name,
-			currentPrice,
+			content,
 		)
+
+		return
+	}
+
+	currentPrice, err := strconv.ParseFloat(
+		fields[3],
+		64,
+	)
+
+	if err != nil {
+
+		fmt.Printf(
+			"❌ [%s] 当前价格解析失败: %v\n",
+			name,
+			err,
+		)
+
 		return
 	}
 
@@ -187,16 +175,17 @@ func sendToWeChat(
 	webhookURL := os.Getenv("WECOM_WEBHOOK")
 
 	if webhookURL == "" {
-		fmt.Println("⚠️ 未配置企业微信Webhook")
+		fmt.Println("⚠️ 未配置 WECOM_WEBHOOK")
 		return
 	}
 
 	msgContent := fmt.Sprintf(
-		"### 📈 股票价格提醒\n"+
-			"> 股票名称：`%s` (%s)\n"+
+		"### 股票价格提醒\n"+
+			"> 股票名称：`%s`\n"+
+			"> 股票代码：`%s`\n"+
 			"> 当前价格：<font color=\"warning\">%.2f 元</font>\n"+
 			"> 目标价格：%.2f 元\n\n"+
-			"> 💡 已达到预设买入区间",
+			"> 已达到预设买入区间。",
 		name,
 		code,
 		current,
@@ -210,7 +199,12 @@ func sendToWeChat(
 		},
 	}
 
-	jsonData, _ := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
+
+	if err != nil {
+		fmt.Printf("❌ JSON编码失败: %v\n", err)
+		return
+	}
 
 	resp, err := http.Post(
 		webhookURL,
@@ -229,7 +223,11 @@ func sendToWeChat(
 
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 
-fmt.Printf("企业微信返回: %s\n", string(body))
+	fmt.Printf(
+		"📨 [%s] 企业微信返回: %s\n",
+		name,
+		string(respBody),
+	)
 }
