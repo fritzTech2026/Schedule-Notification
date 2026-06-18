@@ -102,7 +102,7 @@ func checkStock(code, name string, targetPrice float64) {
 	)
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 60 * time.Second,
 	}
 
 	resp, err := client.Do(req)
