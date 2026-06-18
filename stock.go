@@ -229,8 +229,7 @@ func sendToWeChat(
 
 	defer resp.Body.Close()
 
-	fmt.Printf(
-		"🎉 [%s] 企业微信通知成功\n",
-		name,
-	)
+	body, _ := io.ReadAll(resp.Body)
+
+fmt.Printf("企业微信返回: %s\n", string(body))
 }
