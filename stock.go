@@ -21,6 +21,13 @@ type WeChatMsg struct {
 	Markdown WeChatMarkdown `json:"markdown"`
 }
 
+type PushPlusMessage struct {
+	Token    string `json:"token"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	Template string `json:"template"`
+}
+
 func main() {
 
 	configStr := os.Getenv("STOCK_LIST")
@@ -156,7 +163,13 @@ func checkStock(code, name string, targetPrice float64) {
 			name,
 		)
 
-		sendToWeChat(
+		// sendToWeChat(
+		// 	name,
+		// 	code,
+		// 	currentPrice,
+		// 	targetPrice,
+		// )
+		sendToPushPlus(
 			name,
 			code,
 			currentPrice,
@@ -165,51 +178,117 @@ func checkStock(code, name string, targetPrice float64) {
 	}
 }
 
-func sendToWeChat(
+// func sendToWeChat(
+// 	name string,
+// 	code string,
+// 	current float64,
+// 	target float64,
+// ) {
+
+// 	webhookURL := os.Getenv("WECOM_WEBHOOK")
+
+// 	fmt.Printf("Webhook长度=%d\n", len(webhookURL))
+
+// 	if len(webhookURL) > 50 {
+// 		fmt.Printf(
+// 			"Webhook前30=%s\nWebhook后20=%s\n",
+// 			webhookURL[:30],
+// 			webhookURL[len(webhookURL)-20:],
+// 		)
+// 	}
+
+// 	if webhookURL == "" {
+// 		fmt.Println("⚠️ 未配置 WECOM_WEBHOOK")
+// 		return
+// 	}
+
+// 	msgContent := fmt.Sprintf(
+// 		"### 股票价格提醒\n"+
+// 			"> 股票名称：`%s`\n"+
+// 			"> 股票代码：`%s`\n"+
+// 			"> 当前价格：<font color=\"warning\">%.2f 元</font>\n"+
+// 			"> 目标价格：%.2f 元\n\n"+
+// 			"> 已达到预设买入区间。",
+// 		name,
+// 		code,
+// 		current,
+// 		target,
+// 	)
+
+// 	payload := WeChatMsg{
+// 		MsgType: "markdown",
+// 		Markdown: WeChatMarkdown{
+// 			Content: msgContent,
+// 		},
+// 	}
+
+// 	jsonData, err := json.Marshal(payload)
+
+// 	if err != nil {
+// 		fmt.Printf("❌ JSON编码失败: %v\n", err)
+// 		return
+// 	}
+
+// 	resp, err := http.Post(
+// 		webhookURL,
+// 		"application/json",
+// 		bytes.NewBuffer(jsonData),
+// 	)
+
+// 	if err != nil {
+// 		fmt.Printf(
+// 			"❌ [%s] 企业微信发送失败: %v\n",
+// 			name,
+// 			err,
+// 		)
+// 		return
+// 	}
+
+// 	defer resp.Body.Close()
+
+// 	respBody, _ := io.ReadAll(resp.Body)
+
+// 	fmt.Printf(
+// 		"📨 [%s] 企业微信返回: %s\n",
+// 		name,
+// 		string(respBody),
+// 	)
+// }
+
+func sendToPushPlus(
 	name string,
 	code string,
 	current float64,
 	target float64,
 ) {
 
-    webhookURL := os.Getenv("WECOM_WEBHOOK")
+	token := os.Getenv("PUSHPLUS_TOKEN")
 
-	fmt.Printf("Webhook长度=%d\n", len(webhookURL))
-
-	if len(webhookURL) > 50 {
-		fmt.Printf(
-			"Webhook前30=%s\nWebhook后20=%s\n",
-			webhookURL[:30],
-			webhookURL[len(webhookURL)-20:],
-		)
-	}
-
-	if webhookURL == "" {
-		fmt.Println("⚠️ 未配置 WECOM_WEBHOOK")
+	if token == "" {
+		fmt.Println("❌ 未配置 PUSHPLUS_TOKEN")
 		return
 	}
 
-	msgContent := fmt.Sprintf(
-		"### 股票价格提醒\n"+
-			"> 股票名称：`%s`\n"+
-			"> 股票代码：`%s`\n"+
-			"> 当前价格：<font color=\"warning\">%.2f 元</font>\n"+
-			"> 目标价格：%.2f 元\n\n"+
-			"> 已达到预设买入区间。",
+	content := fmt.Sprintf(
+		"股票名称：%s\n"+
+			"股票代码：%s\n"+
+			"当前价格：%.2f 元\n"+
+			"目标价格：%.2f 元\n\n"+
+			"已达到预设买入区间。",
 		name,
 		code,
 		current,
 		target,
 	)
 
-	payload := WeChatMsg{
-		MsgType: "markdown",
-		Markdown: WeChatMarkdown{
-			Content: msgContent,
-		},
+	msg := PushPlusMessage{
+		Token:    token,
+		Title:    "股票价格提醒",
+		Content:  content,
+		Template: "txt",
 	}
 
-	jsonData, err := json.Marshal(payload)
+	jsonData, err := json.Marshal(msg)
 
 	if err != nil {
 		fmt.Printf("❌ JSON编码失败: %v\n", err)
@@ -217,27 +296,22 @@ func sendToWeChat(
 	}
 
 	resp, err := http.Post(
-		webhookURL,
+		"https://www.pushplus.plus/send",
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)
 
 	if err != nil {
-		fmt.Printf(
-			"❌ [%s] 企业微信发送失败: %v\n",
-			name,
-			err,
-		)
+		fmt.Printf("❌ PushPlus发送失败: %v\n", err)
 		return
 	}
 
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	fmt.Printf(
-		"📨 [%s] 企业微信返回: %s\n",
-		name,
-		string(respBody),
+		"📨 PushPlus返回: %s\n",
+		string(body),
 	)
 }
