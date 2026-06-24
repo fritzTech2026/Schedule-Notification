@@ -278,11 +278,10 @@ func sendToPushPlus(
 	}
 
 	content := fmt.Sprintf(
-		"github股票名称：%s\n"+
-			"股票代码：%s\n"+
+		"%s\n"+
+			"代码：%s\n"+
 			"当前价格：%.2f 元\n"+
-			"目标价格：%.2f 元\n\n"+
-			"已达到预设买入区间。",
+			"目标价格：%.2f 元\n\n",
 		name,
 		code,
 		current,
