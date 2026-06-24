@@ -270,7 +270,7 @@ func sendToPushPlus(
 	}
 
 	content := fmt.Sprintf(
-		"股票名称：%s\n"+
+		"github股票名称：%s\n"+
 			"股票代码：%s\n"+
 			"当前价格：%.2f 元\n"+
 			"目标价格：%.2f 元\n\n"+
@@ -283,7 +283,7 @@ func sendToPushPlus(
 
 	msg := PushPlusMessage{
 		Token:    token,
-		Title:    "股票价格提醒",
+		Title:    "github股票价格提醒",
 		Content:  content,
 		Template: "txt",
 	}
