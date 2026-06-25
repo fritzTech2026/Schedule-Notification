@@ -38,7 +38,7 @@ jobs:
           # ⚙️ 2. 【核心监控区】在这里动态配置你的自选股和买入心理价
           # 格式规则：股票代码:自定义名字:买入目标心理价。多个股票用英文逗号分隔。
           # 提示：沪市股票加 sh（如贵州茅台），深市股票加 sz（如万科 A）
-          STOCK_LIST: "sh600900:长江电力:-25.5,usMSFT:微软:-331,usV:VISA:331,usCRWV:CoreWeave:121"
+          STOCK_LIST: "sh600900:长江电力:-25.5,usMSFT:微软:-331,usV:VISA:-314,usCRWV:CoreWeave:-91"
 
         run: |
           go run stock.go
